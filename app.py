@@ -1,16 +1,15 @@
-# app.py (robust loader + safe Sales & Revenue)
+# app.py (fixed indentation + robust loaders)
 import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.express as px
 from datetime import datetime
 from pathlib import Path
-import os
 
 st.set_page_config(page_title="Operations Dashboard", layout="wide", initial_sidebar_state="expanded")
 
-# --- CSS loader with embedded fallback (no noisy warnings) ---
- EMBEDDED_CSS = """
+# --- Embedded fallback CSS (used silently if assets/styles.css not found) ---
+EMBEDDED_CSS = """
 /* Embedded fallback styles (used when assets/styles.css not found) */
 :root{
   --brand-primary: #2B8E6B;
@@ -65,10 +64,8 @@ a { color: var(--brand-primary); }
 """
 
 def load_css(preferred_path="assets/styles.css"):
-    p_try = Path(preferred_path)
-    # try a few sensible locations
     candidates = [
-        p_try,
+        Path(preferred_path),
         Path(__file__).parent.joinpath(preferred_path),
         Path.cwd().joinpath(preferred_path),
         Path.cwd().joinpath("assets", "styles.css")
@@ -82,7 +79,6 @@ def load_css(preferred_path="assets/styles.css"):
         except Exception:
             continue
     if css_text is None:
-        # silently use embedded CSS (avoids noisy runtime warnings)
         css_text = EMBEDDED_CSS
     st.markdown(f"<style>{css_text}</style>", unsafe_allow_html=True)
 
@@ -110,7 +106,11 @@ def load_data(path="data.csv"):
             continue
     if df is None:
         # Empty skeleton with expected columns to keep UI stable
-        cols = ["date","order_id","product_id","sku","product_name","category","price","cost","qty","revenue","channel","city","warehouse","inventory_on_hand","ltv","customer_id","first_order","spend","visits","add_to_cart","checkout","first_order_date"]
+        cols = [
+            "date","order_id","product_id","sku","product_name","category","price","cost","qty",
+            "revenue","channel","city","warehouse","inventory_on_hand","ltv","customer_id","first_order",
+            "spend","visits","add_to_cart","checkout","first_order_date"
+        ]
         df = pd.DataFrame(columns=cols)
     # parse date safely
     if "date" in df.columns:
@@ -118,7 +118,11 @@ def load_data(path="data.csv"):
     else:
         df["date"] = pd.NaT
     # ensure expected columns exist
-    expected = ["date","order_id","product_id","sku","product_name","category","price","cost","qty","revenue","channel","city","warehouse","inventory_on_hand","ltv","customer_id","first_order","spend","visits","add_to_cart","checkout","first_order_date"]
+    expected = [
+        "date","order_id","product_id","sku","product_name","category","price","cost","qty",
+        "revenue","channel","city","warehouse","inventory_on_hand","ltv","customer_id","first_order",
+        "spend","visits","add_to_cart","checkout","first_order_date"
+    ]
     for c in expected:
         if c not in df.columns:
             df[c] = np.nan
@@ -131,7 +135,10 @@ df = load_data("data.csv")
 
 # --- sidebar: global filters & navigation ---
 st.sidebar.title("Filters & Navigation")
-nav = st.sidebar.radio("Go to", ["Home","Sales & Revenue","Products","Inventory","Marketing & Acquisition","Customers","Exports & Settings"])
+nav = st.sidebar.radio(
+    "Go to",
+    ["Home","Sales & Revenue","Products","Inventory","Marketing & Acquisition","Customers","Exports & Settings"]
+)
 
 # Date filter with defensive defaults
 min_date = df['date'].min() if not df['date'].isna().all() else pd.Timestamp.now().normalize()
@@ -260,11 +267,9 @@ elif nav == "Sales & Revenue":
     else:
         st.info("Need both `product_name` and `revenue` columns for Top N chart.")
 
-# (Other sections preserved but made defensive; include same checks in your full app if you copy further)
 elif nav == "Products":
     st.markdown("<h1 class='page-title'>Products / Catalog</h1>", unsafe_allow_html=True)
     st.subheader("Product Table")
-    # Build product table defensively
     prod_cols = ["product_id","sku","product_name","category","price","cost","revenue","qty"]
     missing = [c for c in prod_cols if c not in df_f.columns]
     if missing:
