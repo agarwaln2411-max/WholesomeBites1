@@ -1,4 +1,4 @@
-# app.py (fixed Product section + robust fail-safes)
+# app.py - final robust version with debug toggle
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -78,6 +78,7 @@ def load_data(path="data.csv"):
         except Exception:
             continue
     if df is None:
+        # Create empty dataframe with expected columns so app doesn't crash
         cols = [
             "date","order_id","product_id","sku","product_name","category","price","cost","qty",
             "revenue","channel","city","warehouse","inventory_on_hand","ltv","customer_id","first_order",
@@ -105,6 +106,17 @@ def load_data(path="data.csv"):
 
 df = load_data("data.csv")
 
+# --- DEBUG SNIPPET: show data diagnostics when needed ---
+show_debug = st.sidebar.checkbox("Show data debug", value=False)
+if show_debug:
+    st.sidebar.markdown("### Raw data diagnostics")
+    try:
+        st.sidebar.write("Full dataset rows:", len(df))
+        st.sidebar.write("Columns:", list(df.columns))
+        st.sidebar.dataframe(df.head(10))
+    except Exception as e:
+        st.sidebar.write("Error reading df:", e)
+
 # --- sidebar: global filters & navigation ---
 st.sidebar.title("Filters & Navigation")
 nav = st.sidebar.radio(
@@ -116,123 +128,8 @@ nav = st.sidebar.radio(
 min_date = df['date'].min() if not df['date'].isna().all() else pd.Timestamp.now().normalize()
 max_date = df['date'].max() if not df['date'].isna().all() else pd.Timestamp.now().normalize()
 
-# convert to date objects (Streamlit prefers date)
 start_date_obj = min_date.date() if hasattr(min_date, "date") else pd.Timestamp.now().date()
 end_date_obj = max_date.date() if hasattr(max_date, "date") else pd.Timestamp.now().date()
 
 start_date, end_date = st.sidebar.date_input("Date range", value=(start_date_obj, end_date_obj))
-start_date = pd.to_datetime(start_date)
-end_date = pd.to_datetime(end_date)
-
-# Category & Channel filters (safe)
-categories = ["All"] + sorted(df['category'].dropna().unique().tolist()) if 'category' in df.columns and not df['category'].dropna().empty else ["All"]
-channels = ["All"] + sorted(df['channel'].dropna().unique().tolist()) if 'channel' in df.columns and not df['channel'].dropna().empty else ["All"]
-sel_category = st.sidebar.selectbox("Category", categories, index=0)
-sel_channel = st.sidebar.selectbox("Channel", channels, index=0)
-
-# Apply filters
-mask = (df['date'] >= start_date) & (df['date'] <= end_date)
-if sel_category != "All":
-    mask &= df['category'] == sel_category
-if sel_channel != "All":
-    mask &= df['channel'] == sel_channel
-df_f = df.loc[mask].copy()
-
-# Helper KPI function (safe formatting)
-def kpi_row(title, value, delta=None, format_fn=None):
-    if format_fn:
-        try:
-            value_str = format_fn(value)
-        except Exception:
-            value_str = str(value)
-    else:
-        value_str = str(value)
-    st.markdown(f"""
-    <div class="kpi-card">
-      <div class="kpi-title">{title}</div>
-      <div class="kpi-value">{value_str}</div>
-      <div class="kpi-delta">{delta if delta is not None else ''}</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-# --- NAVIGATION SCREENS ---
-if nav == "Home":
-    st.markdown("<h1 class='page-title'>Executive Summary</h1>", unsafe_allow_html=True)
-
-    # KPIs (handle missing columns)
-    total_revenue = df_f['revenue'].sum() if 'revenue' in df_f.columns and not df_f['revenue'].isna().all() else 0
-    total_orders = df_f['order_id'].nunique() if 'order_id' in df_f.columns and not df_f['order_id'].isna().all() else 0
-    avg_aov = (total_revenue / total_orders) if total_orders else 0
-    new_customers = df_f[df_f['first_order'] == True]['customer_id'].nunique() if 'first_order' in df_f.columns and 'customer_id' in df_f.columns else (df_f['customer_id'].nunique() if 'customer_id' in df_f.columns else 0)
-    avg_ltv = df_f['ltv'].mean() if 'ltv' in df_f.columns else 0
-
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        kpi_row("Revenue", total_revenue, format_fn=lambda x: f"${x:,.2f}")
-    with col2:
-        kpi_row("Orders", total_orders)
-    with col3:
-        kpi_row("AOV", avg_aov, format_fn=lambda x: f"${x:,.2f}")
-    with col4:
-        kpi_row("Average LTV", avg_ltv, format_fn=lambda x: f"${x:,.2f}")
-
-    st.markdown("---")
-
-    # Revenue trend (safe)
-    st.subheader("Revenue Trend")
-    if 'revenue' in df_f.columns:
-        try:
-            rev_ts = df_f.groupby(pd.Grouper(key="date", freq="D"))['revenue'].sum().reset_index()
-            fig_rev = px.area(rev_ts, x="date", y="revenue", title="Revenue over time", template="simple_white", color_discrete_sequence=["#2B8E6B"])
-            st.plotly_chart(fig_rev, use_container_width=True)
-        except Exception:
-            st.info("Revenue trend unavailable due to data shape.")
-    else:
-        st.info("No `revenue` column found in the dataset.")
-
-    # Top products & channels
-    c1, c2 = st.columns(2)
-    with c1:
-        st.subheader("Top Products (by Revenue)")
-        if 'product_name' in df_f.columns and 'revenue' in df_f.columns:
-            top_prod = df_f.groupby(["product_id","product_name"])['revenue'].sum().reset_index().sort_values("revenue", ascending=False).head(10)
-            st.dataframe(top_prod.rename(columns={"product_name":"Product","revenue":"Revenue"}).style.format({"Revenue":"${:,.2f}"}))
-        else:
-            st.info("Need `product_name` and `revenue` columns to show top products.")
-    with c2:
-        st.subheader("Revenue by Channel")
-        if 'channel' in df_f.columns and 'revenue' in df_f.columns:
-            ch = df_f.groupby("channel")['revenue'].sum().reset_index().sort_values("revenue", ascending=False)
-            fig_ch = px.pie(ch, names="channel", values="revenue", title="Channel mix", color_discrete_sequence=CAT_COLORS)
-            st.plotly_chart(fig_ch, use_container_width=True)
-        else:
-            st.info("Need `channel` and `revenue` columns for channel mix.")
-
-elif nav == "Sales & Revenue":
-    st.markdown("<h1 class='page-title'>Sales & Revenue</h1>", unsafe_allow_html=True)
-    st.subheader("Revenue by Date Granularity")
-
-    # Choose granularity safely
-    gran = st.selectbox("Granularity", ["D","W","M"], index=2, format_func=lambda x: {"D":"Daily","W":"Weekly","M":"Monthly"}[x])
-    grp_map = {"D":"D", "W":"W", "M":"M"}
-    grp = grp_map.get(gran, "M")
-
-    if 'revenue' in df_f.columns:
-        try:
-            rev_ts = df_f.groupby(pd.Grouper(key="date", freq=grp))['revenue'].sum().reset_index()
-            fig = px.line(rev_ts, x="date", y="revenue", title="Revenue", markers=True, color_discrete_sequence=["#2B8E6B"])
-            st.plotly_chart(fig, use_container_width=True)
-        except Exception:
-            st.info("Unable to render revenue time series for the selected granularity.")
-    else:
-        st.info("No `revenue` column available to plot. Add a `revenue` column to the CSV or data source.")
-
-    st.subheader("Revenue by Category / Top N")
-    topn = st.slider("Top N products", min_value=3, max_value=20, value=8)
-    if 'product_name' in df_f.columns and 'revenue' in df_f.columns:
-        try:
-            prod_rev = df_f.groupby("product_name")['revenue'].sum().reset_index().sort_values("revenue", ascending=False).head(topn)
-            fig2 = px.bar(prod_rev, x="revenue", y="product_name", orientation="h", title=f"Top {topn} Products by Revenue", color_discrete_sequence=CAT_COLORS)
-            st.plotly_chart(fig2, use_container_width=True)
-        except Exception:
-            st.info("Unable to render top products chart due to data issues.")
+start_date = pd.to_datetime(start_dat_
