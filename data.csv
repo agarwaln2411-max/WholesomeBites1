@@ -1,0 +1,11 @@
+date,order_id,product_id,sku,product_name,category,price,cost,qty,revenue,channel,city,warehouse,inventory_on_hand,ltv,customer_id,first_order
+2025-11-01,ORD-1001,PROD-1,SKU-001,Almond Butter,Pantry,12.50,7.00,2,25.00,OrganicSearch,Dubai,WH-1,120,45.00,CUST-01,True
+2025-11-02,ORD-1002,PROD-2,SKU-002,Granola Bar,Snacks,2.50,0.8,6,15.00,Email,Abu Dhabi,WH-1,200,18.00,CUST-02,True
+2025-11-03,ORD-1003,PROD-1,SKU-001,Almond Butter,Pantry,12.50,7.00,1,12.50,GoogleAds,Dubai,WH-1,119,65.00,CUST-03,True
+2025-11-04,ORD-1004,PROD-3,SKU-003,Protein Shake,Drinks,25.00,15.00,1,25.00,OrganicSearch,Sharjah,WH-2,50,25.00,CUST-04,True
+2025-11-05,ORD-1005,PROD-4,SKU-004,Green Tea,Drinks,5.00,2.00,3,15.00,Influencer,Dubai,WH-1,80,12.00,CUST-05,True
+2025-11-06,ORD-1006,PROD-2,SKU-002,Granola Bar,Snacks,2.50,0.8,10,25.00,Email,Dubai,WH-1,190,30.00,CUST-02,False
+2025-11-07,ORD-1007,PROD-5,SKU-005,Peanut Chunks,Snacks,3.00,1.00,5,15.00,GoogleAds,Abu Dhabi,WH-2,40,20.00,CUST-06,True
+2025-11-08,ORD-1008,PROD-6,SKU-006,Trail Mix,Snacks,4.50,2.00,4,18.00,OrganicSearch,Dubai,WH-1,60,22.00,CUST-07,True
+2025-11-09,ORD-1009,PROD-7,SKU-007,Matcha Latte,Drinks,6.00,3.00,2,12.00,Email,Sharjah,WH-2,25,12.00,CUST-08,True
+2025-11-10,ORD-1010,PROD-8,SKU-008,Superfood Mix,Pantry,18.00,10.00,1,18.00,Referral,Dubai,WH-1,10,18.00,CUST-09,True
