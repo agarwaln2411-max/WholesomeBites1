@@ -1,4 +1,4 @@
-# app.py (fixed indentation + robust loaders)
+# app.py (fixed Product section + robust fail-safes)
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -10,7 +10,6 @@ st.set_page_config(page_title="Operations Dashboard", layout="wide", initial_sid
 
 # --- Embedded fallback CSS (used silently if assets/styles.css not found) ---
 EMBEDDED_CSS = """
-/* Embedded fallback styles (used when assets/styles.css not found) */
 :root{
   --brand-primary: #2B8E6B;
   --brand-primary-600: #246F52;
@@ -27,39 +26,13 @@ EMBEDDED_CSS = """
   --status-warn: #FFA500;
   --status-info: #3B82F6;
 }
-
-/* page title */
-.page-title{
-  font-size: 28px;
-  color: var(--neutral-900);
-  font-weight: 700;
-  margin-bottom: 8px;
-}
-
-/* KPI card */
-.kpi-card{
-  background: white;
-  border-radius: 8px;
-  padding: 12px;
-  box-shadow: 0 1px 6px rgba(34,34,34,0.06);
-  margin-bottom: 10px;
-}
+.page-title{ font-size: 28px; color: var(--neutral-900); font-weight: 700; margin-bottom: 8px; }
+.kpi-card{ background: white; border-radius: 8px; padding: 12px; box-shadow: 0 1px 6px rgba(34,34,34,0.06); margin-bottom: 10px; }
 .kpi-title { color: var(--neutral-700); font-size: 13px; }
 .kpi-value { color: var(--neutral-900); font-size: 20px; font-weight:700; margin-top:6px; }
 .kpi-delta { color: var(--status-pos); font-size: 13px; }
-
-/* adjust Streamlit content width a bit */
-.reportview-container .main .block-container{
-  padding-left: 1rem;
-  padding-right: 1rem;
-}
-
-/* small rules for tables */
-.stDataFrame table {
-  border-collapse: collapse;
-}
-
-/* links */
+.reportview-container .main .block-container{ padding-left: 1rem; padding-right: 1rem; }
+.stDataFrame table { border-collapse: collapse; }
 a { color: var(--brand-primary); }
 """
 
@@ -105,7 +78,6 @@ def load_data(path="data.csv"):
         except Exception:
             continue
     if df is None:
-        # Empty skeleton with expected columns to keep UI stable
         cols = [
             "date","order_id","product_id","sku","product_name","category","price","cost","qty",
             "revenue","channel","city","warehouse","inventory_on_hand","ltv","customer_id","first_order",
@@ -264,101 +236,3 @@ elif nav == "Sales & Revenue":
             st.plotly_chart(fig2, use_container_width=True)
         except Exception:
             st.info("Unable to render top products chart due to data issues.")
-    else:
-        st.info("Need both `product_name` and `revenue` columns for Top N chart.")
-
-elif nav == "Products":
-    st.markdown("<h1 class='page-title'>Products / Catalog</h1>", unsafe_allow_html=True)
-    st.subheader("Product Table")
-    prod_cols = ["product_id","sku","product_name","category","price","cost","revenue","qty"]
-    missing = [c for c in prod_cols if c not in df_f.columns]
-    if missing:
-        st.info(f"Product table needs columns: {missing}. Showing available columns instead.")
-        st.dataframe(df_f.head(200))
-    else:
-        prod_table = df_f.groupby(prod_cols)['qty'].sum().reset_index().groupby(["product_id","sku","product_name","category","price","cost"])['qty'].sum().reset_index()
-        prod_table['revenue'] = prod_table['price'] * prod_table['qty']
-        prod_table['margin'] = prod_table['price'] - prod_table['cost']
-        st.dataframe(prod_table.sort_values("revenue", ascending=False).head(200).reset_index(drop=True))
-
-elif nav == "Inventory":
-    st.markdown("<h1 class='page-title'>Inventory & Fulfillment</h1>", unsafe_allow_html=True)
-    if 'warehouse' in df_f.columns and 'inventory_on_hand' in df_f.columns:
-        inv = df_f.groupby("warehouse")['inventory_on_hand'].sum().reset_index()
-        fig_inv = px.bar(inv, x="warehouse", y="inventory_on_hand", title="Inventory on hand by warehouse", color_discrete_sequence=["#8B5CF6"])
-        st.plotly_chart(fig_inv, use_container_width=True)
-    else:
-        st.info("Inventory view requires `warehouse` and `inventory_on_hand` columns.")
-
-    st.subheader("Stockouts / Low stock")
-    threshold = st.number_input("Stock threshold", min_value=0, value=10)
-    if 'product_id' in df_f.columns and 'inventory_on_hand' in df_f.columns:
-        low_stock = df_f.groupby(["product_id","product_name"])['inventory_on_hand'].mean().reset_index().sort_values("inventory_on_hand").head(50)
-        low_stock['status'] = np.where(low_stock['inventory_on_hand'] <= threshold, "LOW", "OK")
-        st.dataframe(low_stock.head(200))
-    else:
-        st.info("Stockout table needs `product_id` and `inventory_on_hand`.")
-
-elif nav == "Marketing & Acquisition":
-    st.markdown("<h1 class='page-title'>Marketing & Acquisition</h1>", unsafe_allow_html=True)
-    st.subheader("Spend & Revenue by Channel")
-    if 'spend' in df_f.columns and 'revenue' in df_f.columns and 'channel' in df_f.columns:
-        ch_perf = df_f.groupby("channel").agg({'spend':'sum','revenue':'sum'}).reset_index()
-        ch_perf['roas'] = ch_perf.apply(lambda r: r['revenue'] / r['spend'] if r['spend'] and r['spend']>0 else np.nan, axis=1)
-        fig_roas = px.bar(ch_perf, x='channel', y='roas', title="ROAS by Channel", color_discrete_sequence=CAT_COLORS)
-        st.plotly_chart(fig_roas, use_container_width=True)
-    else:
-        st.info("Add `spend`, `revenue`, and `channel` columns to see Spend vs Revenue.")
-
-    st.subheader("Funnel (visits -> orders)")
-    if 'visits' in df_f.columns:
-        funnel = pd.DataFrame({
-            "stage": ["Visits","Add to Cart","Checkout","Purchased"],
-            "value": [
-                df_f['visits'].sum(),
-                df_f['add_to_cart'].sum() if 'add_to_cart' in df_f.columns else 0,
-                df_f['checkout'].sum() if 'checkout' in df_f.columns else 0,
-                df_f['order_id'].nunique() if 'order_id' in df_f.columns else 0
-            ]
-        })
-        fig_f = px.funnel(funnel, x='value', y='stage', color_discrete_sequence=["#64CBA3","#2B8E6B","#F6C85F","#FF6B5C"])
-        st.plotly_chart(fig_f, use_container_width=True)
-    else:
-        st.info("Add `visits` (and optionally `add_to_cart`, `checkout`) columns to visualize funnel.")
-
-elif nav == "Customers":
-    st.markdown("<h1 class='page-title'>Customers</h1>", unsafe_allow_html=True)
-    if 'customer_id' in df_f.columns and 'revenue' in df_f.columns:
-        cust = df_f.groupby("customer_id")['revenue'].sum().reset_index().sort_values("revenue", ascending=False).head(20)
-        st.dataframe(cust)
-    else:
-        st.info("Customers view needs `customer_id` and `revenue` columns.")
-
-    st.subheader("Cohort: First order month retention (basic)")
-    if 'first_order_date' in df.columns:
-        df['first_month'] = pd.to_datetime(df['first_order_date'], errors="coerce").dt.to_period("M")
-        df['order_month'] = df['date'].dt.to_period("M")
-        cohorts = df.groupby(['first_month','order_month'])['customer_id'].nunique().reset_index()
-        pivot = cohorts.pivot(index='first_month', columns='order_month', values='customer_id').fillna(0)
-        st.dataframe(pivot)
-    else:
-        st.info("No `first_order_date` column present — add it for cohort analysis.")
-
-elif nav == "Exports & Settings":
-    st.markdown("<h1 class='page-title'>Exports & Settings</h1>", unsafe_allow_html=True)
-    st.subheader("Download current filtered data")
-    try:
-        csv = df_f.to_csv(index=False).encode('utf-8')
-        st.download_button("Download CSV", data=csv, file_name="filtered_data.csv", mime="text/csv")
-    except Exception:
-        st.info("Unable to produce CSV export for the filtered dataset.")
-
-    st.markdown("### Developer / Deployment notes")
-    st.markdown("""
-    - Data file lives in `/data.csv` (for demo). For prod, connect to a database or cloud storage.
-    - Use caching for heavy queries.
-    - Use Streamlit Secrets or environment variables to store credentials.
-    """)
-
-# Footer spacer
-st.markdown("<div style='height:24px'></div>", unsafe_allow_html=True)
